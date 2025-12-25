@@ -82,7 +82,7 @@ def main():
                 continue
             else:
                 print('❌ 交易失敗（重試達 3 次），返回商品清單。')
-                input('按 Enter 回到首頁...')
+                input('按 Enter 回到清單...')
                 break
 
 if __name__ == '__main__':
