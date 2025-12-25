@@ -1,68 +1,89 @@
-from typing import Tuple, Dict, Any
+from easycard_service import EasyCardService
 
-class EasyCardService:
-    def __init__(self, initial_balance: int = 300) -> None:
-        self._accounts: Dict[str, int] = {}
-        self._initial_balance = int(initial_balance)
+ITEMS = {
+    'A01': {'name': '生活泡沫綠茶', 'price': 25, 'stock': 10},
+    'B02': {'name': '百事可樂鋁罐', 'price': 30, 'stock': 2},
+    'C03': {'name': '綜合蔓越莓汁', 'price': 29, 'stock': 5},
+}
 
-    def is_valid_card(self, card_number: str) -> bool:
-        return isinstance(card_number, str) and card_number.isdigit() and len(card_number) == 8
+def print_menu():
+    print('=' * 50)
+    print('【悠遊卡自動販賣機】')
+    print('商品清單：')
+    print('-' * 50)
+    print(f"{'代碼':<6}{'商品名稱':<14}{'價格':<8}{'庫存':<8}")
+    print('-' * 50)
+    for code, info in ITEMS.items():
+        print(f"{code:<8}{info['name']:<12}{info['price']:<10}{info['stock']:<8}")
+    print('-' * 50)
+    print('輸入商品代碼購買後按 Enter，或輸入 Q 離開。')
+    print('=' * 50)
 
-    def digit_sum(self, card_number: str) -> int:
-        return sum(int(d) for d in card_number)
+def ask_item_code() -> str:
+    return input('請輸入商品代碼：').strip().upper()
 
-    def is_insufficient_by_rule(self, card_number: str) -> bool:
-        return self.digit_sum(card_number) % 3 == 0
+def validate_item(code: str) -> bool:
+    if code not in ITEMS:
+        print('⚠️ 商品代碼錯誤，請重新輸入。')
+        return False
+    if ITEMS[code]['stock'] <= 0:
+        print('⚠️ 此商品目前缺貨。')
+        return False
+    return True
 
-    def card_exists(self, card_number: str) -> bool:
-        return self.is_valid_card(card_number)
+def main():
+    svc = EasyCardService(initial_balance=100)
 
-    def ensure_account_initialized(self, card_number: str) -> None:
-        if card_number not in self._accounts:
-            self._accounts[card_number] = 0 if self.is_insufficient_by_rule(card_number) else self._initial_balance
+    while True:
+        print_menu()
+        code = ask_item_code()
 
-    def get_balance(self, card_number: str) -> int:
-        if not self.is_valid_card(card_number):
-            return -1
-        self.ensure_account_initialized(card_number)
-        return self._accounts[card_number]
+        if code == 'Q':
+            print('系統結束，感謝使用！')
+            break
 
-    def has_sufficient_balance(self, card_number: str, amount: int) -> bool:
-        bal = self.get_balance(card_number)
-        return bal >= 0 and bal >= amount
+        if not validate_item(code):
+            input('按 Enter 回到清單...')
+            continue
 
-    def charge(self, card_number: str, amount: int) -> Tuple[bool, Dict[str, Any]]:
-        if not self.is_valid_card(card_number):
-            return False, {'error': '卡號格式錯誤，需為 8 位數字'}
-        if amount <= 0:
-            return False, {'error': '扣款金額需為正整數'}
+        item = ITEMS[code]
+        name = item['name']
+        price = item['price']
+        print(f"您選擇：{name}，價格：{price} 元")
 
-        if self.is_insufficient_by_rule(card_number):
-            self.ensure_account_initialized(card_number)
-            return False, {'error': '餘額不足'}
+        combined_attempts = 0
+        max_attempts = 3
 
-        self.ensure_account_initialized(card_number)
-        if not self.has_sufficient_balance(card_number, amount):
-            return False, {'error': '餘額不足'}
+        while True:
+            card_number = input('請輸入悠遊卡卡號（8 碼）：').strip()
+            error_msg = None
 
-        self._accounts[card_number] -= amount
-        return True, {'new_balance': self._accounts[card_number]}
+            if not (card_number.isdigit() and len(card_number) == 8):
+                error_msg = '卡號格式錯誤，需為 8 位數字'
+                combined_attempts += 1
+            else:
+                ok, info = svc.charge(card_number, price)
+                if ok:
+                    ITEMS[code]['stock'] -= 1
+                    remaining_bal = info.get('new_balance', None)
+                    print('✅ 交易成功！')
+                    if remaining_bal is not None:
+                        print(f'悠遊卡剩餘餘額：{remaining_bal} 元')
+                    print('交易完成請取卡，謝謝光臨！')
+                    input('按 Enter 回到清單...')
+                    break
+                else:
+                    error_msg = info.get('error', '未知錯誤')
+                    combined_attempts += 1
 
-    def top_up(self, card_number: str, amount: int) -> Tuple[bool, Dict[str, Any]]:
-        if not self.is_valid_card(card_number):
-            return False, {'error': '卡號格式錯誤，需為 8 位數字'}
-        if amount <= 0:
-            return False, {'error': '加值金額需為正整數'}
-        self.ensure_account_initialized(card_number)
-        self._accounts[card_number] += amount
-        return True, {'new_balance': self._accounts[card_number]}
-
+            remaining = max_attempts - combined_attempts
+            if remaining > 0:
+                print(f'❌ 交易失敗：{error_msg}。可再試 {remaining} 次。')
+                continue
+            else:
+                print('❌ 交易失敗（重試達 3 次），返回商品清單。')
+                input('按 Enter 回到清單...')
+                break
 
 if __name__ == '__main__':
-    svc = EasyCardService(initial_balance=300)
-    samples = ['12345678', '87654321', '11112222', '22223333', '33334444', '13572468', '00000000', '99999999']
-    print('示範檢查：')
-    for c in samples:
-        bal = svc.get_balance(c)
-        rule = '3 的倍數 → 餘額不足' if svc.is_insufficient_by_rule(c) else '非 3 的倍數 → 有餘額'
-        print(f'卡號 {c} | 初始餘額: {bal} | 規則：{rule}')
+    main()
